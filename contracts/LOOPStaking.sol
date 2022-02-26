@@ -10,72 +10,9 @@ import '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 
-contract ReentrancyGuardUpgradeSafe is Initializable {
-    bool private _notEntered;
-
-
-    function __ReentrancyGuard_init() internal initializer {
-        __ReentrancyGuard_init_unchained();
-    }
-
-    function __ReentrancyGuard_init_unchained() internal initializer {
-
-
-        // Storing an initial non-zero value makes deployment a bit more
-        // expensive, but in exchange the refund on every call to nonReentrant
-        // will be lower in amount. Since refunds are capped to a percetange of
-        // the total transaction's gas, it is best to keep them low in cases
-        // like this one, to increase the likelihood of the full refund coming
-        // into effect.
-        _notEntered = true;
-
-    }
-
-
-    /**
-     * @dev Prevents a contract from calling itself, directly or indirectly.
-     * Calling a `nonReentrant` function from another `nonReentrant`
-     * function is not supported. It is possible to prevent this from happening
-     * by making the `nonReentrant` function external, and make it call a
-     * `private` function that does the actual work.
-     */
-    modifier nonReentrant() {
-        // On the first call to nonReentrant, _notEntered will be true
-        require(_notEntered, "ReentrancyGuard: reentrant call");
-
-        // Any calls to nonReentrant after this point will fail
-        _notEntered = false;
-
-        _;
-
-        // By storing the original value once again, a refund is triggered (see
-        // https://eips.ethereum.org/EIPS/eip-2200)
-        _notEntered = true;
-    }
-
-    uint256[49] private __gap;
-}
-
-contract Authorizable is Ownable {
-    mapping(address => bool) public authorized;
-
-    modifier onlyAuthorized() {
-        require(authorized[msg.sender] || owner() == msg.sender, "caller is not authorized");
-        _;
-    }
-
-    function addAuthorized(address _toAdd) public onlyOwner {
-        authorized[_toAdd] = true;
-    }
-
-    function removeAuthorized(address _toRemove) public onlyOwner {
-        require(_toRemove != msg.sender);
-        authorized[_toRemove] = false;
-    }
-}
-
-contract TestLOOP is ERC20, Ownable, Authorizable {
+contract TestLOOP is ERC20, Ownable {
 
     address private _stakingContract;
 
@@ -101,7 +38,7 @@ contract TestLOOP is ERC20, Ownable, Authorizable {
     }
 }
 
-contract LOOPStaking is Ownable, Authorizable, ReentrancyGuardUpgradeSafe {
+contract LOOPStaking is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -418,8 +355,7 @@ contract LOOPStaking is Ownable, Authorizable, ReentrancyGuardUpgradeSafe {
         }
     }
 
-    // function staking(uint256 _amount) external nonReentrant {
-    function staking(uint256 _amount) external { //only for script testing
+    function staking(uint256 _amount) external nonReentrant {    
         require(
             _amount > 0,
             "MasterGardener::deposit: amount must be greater than 0"
@@ -461,8 +397,7 @@ contract LOOPStaking is Ownable, Authorizable, ReentrancyGuardUpgradeSafe {
         emit Staked(msg.sender, _amount);
     }
 
-    // function unstaking(uint256 _amount) external nonReentrant {
-    function unstaking(uint256 _amount) external { //only for script testing
+    function unstaking(uint256 _amount) external nonReentrant {    
         uint256 uid = userId[address(msg.sender)];
         require(uid>0, "Not a staker");
 
