@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/utils/Address.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import '@openzeppelin/contracts/utils/math/SafeMath.sol';
-import '@openzeppelin/contracts/utils/Context.sol';
-import '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
-import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/proxy/utils/Initializable.sol';
-import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
-import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract TestLOOP is ERC20, Ownable {
 
@@ -44,14 +44,17 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
 
     // Info of each user.
     struct UserInfo {
+        address user;
         uint256 amount; //stacked amount
-        uint256 rewardDebt; //return backed rewards
+        uint256 rewardDebt; //return backed total rewards
+        uint256 rewardUnlockDebt; //return backed unlock rewards
         uint256 rewardDebtAtTime;
         uint256 lastWithdrawTime;
         uint256 firstDepositTime;
         uint256 lastDepositTime;
         uint256 lastRewardTime;
         uint256 accRewards;
+        uint256 accUnlockRewards;     
     }
     struct ClaimHistory {
         address user;
@@ -64,9 +67,8 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     uint256 public REWARD_PER_BLOCK; 
     uint256[] public REWARD_MULTIPLIER; // init in constructor function
     uint256[] public HALVING_AT_TIME; // init in constructor function
-    uint256[] public timeDeltaStartStage;
-    uint256[] public timeDeltaEndStage;
-    uint256[] public userFeeStage;
+    uint256[] public unstakingPeriodStage;    
+    uint256[] public userFeePerPeriodStage;
     uint256 public FINISH_BONUS_AT_TIME;
 
     uint256 public HALVING_AFTER_TIME;
@@ -75,17 +77,28 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     uint256 public START_TIME;
 
     uint256[] public PERCENT_LOCK_BONUS_REWARD; // lock xx% of bounus reward
-    address treasuryAddr;
+    address public communityPool;
+    address public ecosystemPool;
+    address public reservePool;
+    address public foundersPool;
+    address public advisorsPool;
 
     UserInfo[] public userInfo;
     mapping(address => uint256) public userId;
 
-    struct LockInfo {
-        address user;
-        uint256 amount;
+    // struct LockInfo {
+    //     address user;
+    //     uint256 amount;
+    // }
+    // LockInfo[] public lockInfo;
+    // mapping(address => uint256) public lockId;
+
+    struct _LockInfo{
+        uint256 lockedTime;
+        uint256 lockedAmount;
     }
-    LockInfo[] public lockInfo;
-    mapping(address => uint256) public lockId;
+
+    mapping(address => _LockInfo[]) public _lockInfo;
 
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
@@ -104,10 +117,8 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         uint256 _halvingAfterBlock,
         uint256[] memory _rewardMultiplier,
         uint256[] memory _percentLockReward,
-        uint256[] memory _timeDeltaStartStage,
-        uint256[] memory _timeDeltaEndStage,
-        uint256[] memory _userFeeStage,
-        address _treasuryAddr
+        uint256[] memory _unstakingPeriodStage,        
+        uint256[] memory _userFeePerPeriodStage
     ) {
         require(_rewardStartTimestamp > block.timestamp, "_rewardStartTimestamp must be after block.timestamp!");
         
@@ -116,11 +127,9 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         REWARD_PER_BLOCK = _rewardPerBlock.mul(10 ** govToken.decimals());
         REWARD_MULTIPLIER = _rewardMultiplier;
         PERCENT_LOCK_BONUS_REWARD = _percentLockReward;
-        timeDeltaStartStage = _timeDeltaStartStage;
-        timeDeltaEndStage = _timeDeltaEndStage;
-        userFeeStage = _userFeeStage;
-        treasuryAddr = _treasuryAddr;
-
+        unstakingPeriodStage = _unstakingPeriodStage;        
+        userFeePerPeriodStage = _userFeePerPeriodStage;
+        
         HALVING_AFTER_TIME = _halvingAfterBlock * 2;
 
         START_TIME = _rewardStartTimestamp;
@@ -143,6 +152,20 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         transferOwnership(_new);
     }
 
+    function setDistributionAddress(
+        address _communityPool,
+        address _ecosystemPool,
+        address _reservePool,
+        address _foundersPool,
+        address _advisorsPool
+    ) public onlyOwner{
+        communityPool = _communityPool;
+        ecosystemPool = _ecosystemPool;
+        reservePool = _reservePool;
+        foundersPool = _foundersPool;
+        advisorsPool = _advisorsPool;
+    }
+
     // Update reward variables for all pools. Be careful of gas spending!
     function massUpdate() public {
         uint256 length = userInfo.length;
@@ -154,38 +177,20 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     function setRewardStartTimestamp(uint256 _rewardStartTimestamp) external onlyOwner{
         require(_rewardStartTimestamp > block.timestamp, "_rewardStartTimestamp must be after block.timestamp!");
 
-        delete HALVING_AT_TIME;
-
         START_TIME = _rewardStartTimestamp;
         for (uint256 i = 0; i < REWARD_MULTIPLIER.length - 1; i++) {
             uint256 halvingAtTime = HALVING_AFTER_TIME.mul(i+1).add(START_TIME).add(1);
-            HALVING_AT_TIME.push(halvingAtTime);
+            HALVING_AT_TIME[i]=halvingAtTime;
         }
         FINISH_BONUS_AT_TIME = HALVING_AFTER_TIME
             .mul(REWARD_MULTIPLIER.length - 1)
             .add(START_TIME);
-        HALVING_AT_TIME.push(uint256(0));
+        HALVING_AT_TIME[HALVING_AT_TIME.length-1]=(uint256(0));
     }
 
     //set LOOP Token only by owner
     function setLOOPToken(TestLOOP _govToken) external onlyOwner {
         govToken = _govToken;
-    }
-
-    // Update reward variables to be up-to-date.
-    function updateInfo(uint256 _uid) private {
-        UserInfo storage user = userInfo[_uid];
-        if (block.timestamp <= user.lastRewardTime) {
-            return;
-        }
-        if (user.amount == 0) {
-            user.lastRewardTime = block.timestamp;
-            return;
-        }
-        uint256 GovTokenForFarmer  = getReward(user.lastRewardTime, block.timestamp);
-        user.accRewards += user.amount.mul(GovTokenForFarmer).div(totalStacked);
- 
-        user.lastRewardTime = block.timestamp;
     }
 
     // Return reward multiplier over the given _from to _to block.
@@ -228,8 +233,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         return result;
     }
 
-    function getReward( uint256 _from, uint256 _to ) private view returns ( uint256 )
-    {
+    function getReward( uint256 _from, uint256 _to ) private view returns ( uint256 ){
         uint256 multiplier = getMultiplier(_from, _to);
         uint256 amount = multiplier * REWARD_PER_BLOCK;
         amount = amount.div(2);
@@ -246,8 +250,18 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         return claimHistory;
     }
 
+    function getLockedRewards(address user) private view returns(uint256){
+        _LockInfo[] memory _info  = _lockInfo[user];
+        uint256 amount = 0;
+
+        for(uint256 i=0; i<_info.length; i++){
+            amount = amount.add(_info[i].lockedAmount);
+        }
+        return amount;
+    }
+
     // View function to see pending LOOP on frontend.
-    function pendingReward(address _user) external view returns (uint256 pending, uint256 locked) {
+    function pendingReward(address _user) external view returns (uint256 pendingUnlocked, uint256 pendingLocked, uint256 availableLockedAmount) {
         uint256 uid = userId[_user];
         if (uid==0){
             pending = 0;
@@ -257,6 +271,8 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         else { 
             UserInfo memory user = userInfo[uid-1];
             uint256 accAmount = user.accRewards;
+            uint256 accUnlockAmount = user.accUnlockRewards;
+            uint256 lockPercentage = getLockPercentage(block.timestamp - 1, block.timestamp);
             if (block.timestamp > user.lastRewardTime && user.amount > 0) {
                 uint256 GovTokenForFarmer = getReward(
                     user.lastRewardTime,
@@ -265,36 +281,17 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
                 accAmount = accAmount.add(
                     GovTokenForFarmer.mul(user.amount).div(totalStacked)
                 );
-            }
-            uint256 lockPercentage = getLockPercentage(block.timestamp - 1, block.timestamp);
+            }            
 
-            pending = accAmount.sub(user.rewardDebt);
-            locked = pending.mul(lockPercentage).div(100);
-            pending = pending.sub(locked);
+            uint256 availableLockedAmount = pendingAvailableLockedReward(uid);
 
-            uint256 id = lockId[msg.sender];
-            if(id > 0){
-                locked = locked.add(lockInfo[id-1].amount);
-            }
+            pendingUnlocked = accAmount.sub(user.rewardDebt);
+            pendingLocked = pendingUnlocked.mul(lockPercentage).div(100);
+            pendingUnlocked = pending.sub(pendingLocked);
 
-            return (pending, locked);
+            locked = locked.add(getLockedRewards(user.user));
+            return (pendingUnlocked, pendingLocked, availableLockedAmount);
         }
-    }
-    function unlock(address _user) public onlyOwner{
-        uint256 id = lockId[_user];
-        if (id > 0){
-            govToken.transfer(lockInfo[id-1].user, lockInfo[id-1].amount);
-        }
-    }
-    function unlockAll() external onlyOwner{
-        for(uint256 i = 0; i<lockInfo.length; i++){
-            unlock(lockInfo[i].user);
-        }
-    }
-    function lockedRewards(address _user) external view returns (uint256) {
-        uint256 id = lockId[_user];
-        if (id == 0) return 0;
-        return lockInfo[id-1].amount;
     }
 
     function claimReward() external {
@@ -304,6 +301,70 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
 
         updateInfo(uid-1);
         _harvest(uid-1);
+    }
+
+    // Update reward variables to be up-to-date.
+    function updateInfo(uint256 _uid) private {
+        UserInfo storage user = userInfo[_uid];        
+
+        if (block.timestamp <= user.lastRewardTime) {
+            return;
+        }
+        if (user.amount == 0) {
+            user.lastRewardTime = block.timestamp;
+            return;
+        }
+        uint256 GovTokenForFarmer  = getReward(user.lastRewardTime, block.timestamp);
+        uint256 userNewAccRewards = user.amount.mul(GovTokenForFarmer).div(totalStacked)
+        user.accRewards += userNewAccRewards;
+
+        uint256 lockPercentage = 0;
+        if (user.rewardDebtAtTime <= FINISH_BONUS_AT_TIME) {
+            lockPercentage = getLockPercentage(block.timestamp - 1, block.timestamp);
+        }
+        uint256 lockAmount = userNewAccRewards.mul(lockPercentage).div(100);
+
+        _LockInfo[] storage _info = _lockInfo[msg.sender];
+        _info.push(
+            _LockInfo({
+                lockedTime: block.timestamp,
+                lockedAmount: lockAmount
+            })
+        );
+                    
+        user.lastRewardTime = block.timestamp;
+    }
+    
+    function pendingAvailableLockedReward(uint256 _uid) private return (uint256) {
+        UserInfo memory _userInfo = userInfo[_uid];
+
+        _LockInfo[] memory _info = _lockInfo[_userInfo.user];
+        uint256 lockPeriod = 60*60*24*30*6; //ss*mm*hh*dd*6 months
+        uint256 availableLockedAmount = 0;
+
+        for(uint256 i = 0; i < _info.length;){
+            if(_info[i].lockedTime > block.timestamp + lockPeriod){
+                availableLockedAmount.add(_info[i].lockedAmount);                
+            }            
+        }
+
+        return availableLockedAmount;
+    }
+
+    function unlock(uint256 _uid) private return (uint256) {
+        UserInfo storage _userInfo = userInfo[_uid];
+        uint256 availableLockedAmount = 0;
+        _LockInfo[] storage _info = _lockInfo[_userInfo.user];
+        uint256 lockPeriod = 60*60*24*30*6; //ss*mm*hh*dd*6 months
+
+        for(uint256 i = 0; i < _info.length;){
+            if(_info[i].lockedTime > block.timestamp + lockPeriod){                
+                availableLockedAmount = availableLockedAmount.add(_info[i].lockedAmount);
+                _info[i].lockedAmount = 0;                
+            }            
+        }
+
+        return availableLockedAmount;
     }
 
     // lock a % of reward if it comes from bonus time.
@@ -319,33 +380,24 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
                 if (user.rewardDebtAtTime <= FINISH_BONUS_AT_TIME) {
                     lockPercentage = getLockPercentage(block.timestamp - 1, block.timestamp);
                 }
+
                 uint256 lockAmount = pending.mul(lockPercentage).div(100);
 
+                pending = pending.sub(lockAmount);
+
+                uint256 availableLockedAmount = unlock(_uid);
+
+                pending = pending.add(availableLockedAmount);
+
                 if (pending.sub(lockAmount) > 0){
-                    govToken.transfer(msg.sender, pending.sub(lockAmount));
+                    govToken.transfer(msg.sender, pending);
                     claimHistory.push(
                         ClaimHistory({
                         user: msg.sender,
                         amount: pending.sub(lockAmount),
                         datetime: block.timestamp
                     }));
-                }
-                if (lockAmount > 0){
-                    uint256 id = lockId[msg.sender];
-                    if(id > 0) {
-                        lockInfo[id-1].amount += lockAmount;
-                    }
-                    else{
-                        id = lockInfo.length + 1;
-                        lockId[msg.sender] = id;
-                        lockInfo.push(
-                            LockInfo({
-                                user: msg.sender,
-                                amount: lockAmount
-                            })
-                        );
-                    }
-                }
+                }                
                 user.rewardDebtAtTime = block.timestamp;
                 emit SendGovernanceTokenReward(msg.sender, pending, lockAmount);
             }
@@ -371,6 +423,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
             userId[address(msg.sender)] = uid;
             userInfo.push(
                 UserInfo({
+                    user: msg.sender,
                     amount: 0,
                     rewardDebt: 0,
                     rewardDebtAtTime: block.timestamp,
@@ -406,6 +459,8 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[uid-1];
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
+            totalStacked = totalStacked.sub(_amount);
+
             uint256 timeDelta;
             if (user.lastWithdrawTime > 0) {
                 timeDelta = block.timestamp - user.lastWithdrawTime;
@@ -415,64 +470,94 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
 
             uint256 userAmount = 0;
             uint256 treasuryAmount = 0;
-            if (
-                timeDelta == timeDeltaStartStage[0] ||
-                block.timestamp == user.lastDepositTime
-            ) {
-                //25% fee for withdrawals of LP tokens in the same block this is to prevent abuse from flashloans
-                treasuryAmount = _amount.mul(userFeeStage[0]).div(10000);
-                userAmount = _amount.sub(userAmount);
-            } else if (
+            
+            if (timeDelta <= unstakingPeriodStage[0]) {
+                //25% slashing fee if a user withdraws during the same block
+                treasuryAmount = _amount.mul(userFeePerPeriodStage[0]).div(10000);
+            }
+            if (timeDelta>unstakingPeriodStage[0] && timeDelta<=unstakingPeriodStage[1]){
+                //8% fee if a user withdraws in less than 1 day
+                treasuryAmount = _amount.mul(userFeePerPeriodStage[1]).div(10000);
+            }
+            if (timeDelta>unstakingPeriodStage[1] && timeDelta<=unstakingPeriodStage[2]){
+                //4% fee if a user withdraws after 1 day
+                treasuryAmount = _amount.mul(userFeePerPeriodStage[2]).div(10000);
+            }
+            if (timeDelta>unstakingPeriodStage[2] && timeDelta<=unstakingPeriodStage[3]){
+                //2% fee if a user withdraws after 5 days
+                treasuryAmount = _amount.mul(userFeePerPeriodStage[3]).div(10000);
+            }
+            if (timeDelta>unstakingPeriodStage[3] && timeDelta<=unstakingPeriodStage[4]){
+                //1% fee if a user deposits and withdraws after 3 days but before 5 days.
+                treasuryAmount = _amount.mul(userFeePerPeriodStage[4]).div(10000);
+            }
+            if (timeDelta>unstakingPeriodStage[4] && timeDelta<=unstakingPeriodStage[5]){
+                //0.25% fee if a user deposits and withdraws if the user withdraws after 5 days but before 2 weeks.
+                treasuryAmount = _amount.mul(userFeeStage[5]).div(100);
+            }
+            if (timeDelta>unstakingPeriodStage[5]){
+
+            }
+             else if (
                 timeDelta >= timeDeltaStartStage[1] &&
                 timeDelta <= timeDeltaEndStage[0]
-            ) {
-                //8% fee if a user deposits and withdraws in between same block and 59 minutes.
-                treasuryAmount = _amount.mul(userFeeStage[1]).div(10000);
-                userAmount = _amount.sub(userAmount);
+            ) {                
             } else if (
                 timeDelta >= timeDeltaStartStage[2] &&
                 timeDelta <= timeDeltaEndStage[1]
             ) {
-                //4% fee if a user deposits and withdraws after 1 hour but before 1 day.
-                treasuryAmount = _amount.mul(userFeeStage[2]).div(10000);
-                userAmount = _amount.sub(userAmount);
+                
             } else if (
                 timeDelta >= timeDeltaStartStage[3] &&
                 timeDelta <= timeDeltaEndStage[2]
             ) {
-                //2% fee if a user deposits and withdraws between after 1 day but before 3 days.
-                treasuryAmount = _amount.mul(userFeeStage[3]).div(10000);
-                userAmount = _amount.sub(userAmount);
+                
             } else if (
                 timeDelta >= timeDeltaStartStage[4] &&
                 timeDelta <= timeDeltaEndStage[3]
             ) {
-                //1% fee if a user deposits and withdraws after 3 days but before 5 days.
-                treasuryAmount = _amount.mul(userFeeStage[4]).div(10000);
-                userAmount = _amount.sub(userAmount);
+                
             } else if (
                 timeDelta >= timeDeltaStartStage[5] &&
                 timeDelta <= timeDeltaEndStage[4]
             ) {
-                //0.25% fee if a user deposits and withdraws if the user withdraws after 5 days but before 2 weeks.
-                treasuryAmount = _amount.mul(userFeeStage[5]).div(100);
-                userAmount = _amount.sub(userAmount);
+
             }  else if (timeDelta > timeDeltaStartStage[6]) {
                 //0.01% fee if a user deposits and withdraws after 4 weeks.
                 treasuryAmount = _amount.mul(userFeeStage[6]).div(10000);
-                userAmount= _amount.sub(userAmount);
             }
+            userAmount= _amount.sub(treasuryAmount);
             
             govToken.transfer(
                 address(msg.sender),
                 userAmount
             );
+
+            uint256 burnAmount = treasuryAmount.div(100);
+            treasuryAmount = treasuryAmount.sub(burnAmount);
+
             govToken.transfer(
-                address(treasuryAddr),
-                treasuryAmount.mul(80).div(100)
+                address(communityPool),
+                treasuryAmount.mul(45).div(100)
+            );
+            govToken.transfer(
+                address(ecosystemPool),
+                treasuryAmount.mul(20).div(100)
+            );
+            govToken.transfer(
+                address(reservePool),
+                treasuryAmount.mul(15).div(100)
+            );
+            govToken.transfer(
+                address(foundersPool),
+                treasuryAmount.mul(15).div(100)
+            );
+            govToken.transfer(
+                address(advisorsPool),
+                treasuryAmount.mul(5).div(100)
             );
 
-            govToken.burn(treasuryAmount.mul(20).div(100));
+            govToken.burn(burnAmount);
 
             emit Unstaked(msg.sender, _amount);
             user.lastWithdrawTime = block.timestamp;

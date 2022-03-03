@@ -39,12 +39,11 @@ export async function LOOPStaking_fixture([wallet]: Wallet[]): Promise<LOOPStaki
   // 35 months Locked (%)
   const _percentLockReward = [95,93,91,89,87,85,83,81,79,77,75,73,71,69,67,65,63,61,59,57,55,53,51,49,47,45,43,41,39,37,35,33,31,29,27]
   // Staking period when withdrawing: Same Block, <1day >1day >5days >7days >14days >30days
-  const _timeDeltaStartStage =       [0,     1,  86400, 432000,  640800, 1209600, 2592000]
-  const _timeDeltaEndStage =         [   86400, 432000, 640800,  1209600, 2592000        ]
+  const _unstakingPeriodStage =       [ 2,  86400, 432000,  640800, 1209600, 2592000 ]
   // Withdrawal Fees:     25%   8%   4%   2%   1%  0.25% 0.01%
-  const _userFeeStage = [2500, 800, 400, 200, 100,    25,   1]
-  // Treasury Wallet
-  const _treasuryAddr = "0x4b5d08116B8eECb01031194d393a2DeafB215DD1"; 
+  const _userFeePerPeriodStage = [2500, 800, 400, 200, 100,    25,   1]
+  // distrubution address
+  const _treasuryAddr = "0x4eFD61e180Ac75E1C1d2b7075Dfc3e627c458ACC"; 
   
   const LOOPStakingContract = await deployContract(wallet, LOOPStaking, [
       _govToken,
@@ -54,10 +53,8 @@ export async function LOOPStaking_fixture([wallet]: Wallet[]): Promise<LOOPStaki
       _halvingAfterBlock,
       _rewardMultiplier,
       _percentLockReward,
-      _timeDeltaStartStage,
-      _timeDeltaEndStage,
-      _userFeeStage,
-      _treasuryAddr
+      _unstakingPeriodStage,      
+      _userFeePerPeriodStage
   ], overrides)    
   return { LOOPStakingContract, LOOPToken }
 }
