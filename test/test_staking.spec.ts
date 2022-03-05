@@ -373,34 +373,7 @@ describe('LOOPStaking', () => {
         await LOOPStakingContract.connect(user3).claimReward()
         balance = await LOOPToken.balanceOf(user3.address)
         console.log("user3 balance after claiming: " + balance.div(BigNumber.from(10).pow(18)))
-        console.log("==================================\n")
-
-        console.log('\n===user1 total locked rewards after 250days since reward starting===')
-        secs = 3600 * 24 * 250
-        blockTime = rewardStartTime + secs
-        blockCounts = secs / 2
-        await mineBlock(provider, blockTime);
-        res = await LOOPStakingContract.getLockedRewards(user1.address)
-        console.log("user1 total locked rewards: " + res.div(BigNumber.from(10).pow(18)))
-        console.log("==================================\n")
-
-        console.log('\n===user2 total locked rewards after 260days since reward starting===')
-        secs = 3600 * 24 * 260
-        blockTime = rewardStartTime + secs
-        blockCounts = secs / 2
-        await mineBlock(provider, blockTime);
-        res = await LOOPStakingContract.getLockedRewards(user2.address)
-        console.log("user2 total locked rewards: " + res.div(BigNumber.from(10).pow(18)))
-        console.log("==================================\n")
-
-        console.log('\n===user3 total locked rewards after 260days since reward starting===')
-        secs = 3600 * 24 * 260
-        blockTime = rewardStartTime + secs
-        blockCounts = secs / 2
-        await mineBlock(provider, blockTime);
-        res = await LOOPStakingContract.getLockedRewards(user3.address)
-        console.log("user3 total locked rewards: " + res.div(BigNumber.from(10).pow(18)))
-        console.log("==================================\n")
+        console.log("==================================\n")        
         
         console.log('\n===user1 claimed history since reward starting===')
         res = await LOOPStakingContract.connect(wallet).getClaimHistory()
@@ -423,6 +396,7 @@ describe('LOOPStaking', () => {
         total+=sum
         console.log("\t user2 total rewards: " + sum)
         let user3Claimed = res.filter((item: any) => item.user === user3.address)
+        sum=0
         console.log("\nuser3 claimed history: ")
         user3Claimed.map((item: any) => {
             console.log("\t" + item.amount.div(BigNumber.from(10).pow(18)) + "   " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
