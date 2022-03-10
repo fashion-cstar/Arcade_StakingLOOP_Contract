@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.11;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/Address.sol"; 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
@@ -48,7 +48,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     // Info of each user.
     struct UserInfo {
         address user;
-        uint256 amount; //stacked amount
+        uint256 amount; //staked amount
         uint256 rewardDebt; //return backed total rewards
         uint256 rewardUnlockDebt; //return backed unlock rewards
         uint256 rewardDebtAtTime;
@@ -75,11 +75,11 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     uint256 public FINISH_BONUS_AT_TIME;
 
     uint256 public HALVING_AFTER_TIME;
-    uint256 public totalStacked;
+    uint256 public totalStaked;
     uint256 public CAP;
     uint256 public START_TIME;
 
-    uint256[] public PERCENT_LOCK_BONUS_REWARD; // lock xx% of bounus reward
+    uint256[] public PERCENT_LOCK_BONUS_REWARD; // lock xx% of bonus reward
     address public communityPool;
     address public ecosystemPool;
     address public reservePool;
@@ -87,7 +87,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     address public advisorsPool;
 
     UserInfo[] public userInfo;
-    mapping(address => uint256) public userId;
+    mapping(address => uint256) public userId; //Maps 0x address to staking user's internal user id
 
     struct _LockInfo {
         uint256 lockedTime;
@@ -139,6 +139,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
             );
             HALVING_AT_TIME.push(halvingAtTime);
         }
+
         FINISH_BONUS_AT_TIME = HALVING_AFTER_TIME
             .mul(REWARD_MULTIPLIER.length)
             .add(START_TIME);
@@ -154,6 +155,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         address _reservePool,
         address _foundersPool,
         address _advisorsPool
+
     ) public onlyOwner {
         communityPool = _communityPool;
         ecosystemPool = _ecosystemPool;
@@ -205,7 +207,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         uint256 amount = multiplier * REWARD_PER_BLOCK;
         amount = amount.div(2);
 
-        uint256 GovernanceTokenCanMint = CAP - totalStacked;
+        uint256 GovernanceTokenCanMint = CAP - totalStaked;
 
         if (GovernanceTokenCanMint < amount) return GovernanceTokenCanMint;
         else return amount;
@@ -254,7 +256,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
 
                 uint256 userNewAccRewards = GovTokenForFarmer
                     .mul(user.amount)
-                    .div(totalStacked);
+                    .div(totalStaked);
                 accAmount = accAmount.add(userNewAccRewards);
                 uint256 lockAmount = userNewAccRewards.mul(lockPercentage).div(
                     100
@@ -266,14 +268,15 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
 
             availableLockedAmount = pendingAvailableLockedReward(uid - 1);
 
-            pendingUnlocked = accUnlockAmount.sub(user.rewardUnlockDebt);
             uint256 pendingRewards = accAmount.sub(user.rewardDebt);
+            pendingUnlocked = accUnlockAmount.sub(user.rewardUnlockDebt);
             pendingLocked = pendingRewards.sub(pendingUnlocked);
 
             return (pendingUnlocked, pendingLocked, availableLockedAmount);
         }
     }
 
+    //Total Locked Rewards Available
     function pendingAvailableLockedReward(uint256 _uid)
         private
         view
@@ -324,13 +327,15 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     }
 
     // Return reward multiplier over the given _from to _to block.
+    // This multiplier is the product of the Block Multiplier x # of Blocks
+
     function getMultiplier(uint256 _from, uint256 _to)
         private
         view
         returns (uint256)
     {
         uint256 result = 0;
-        if (_from < START_TIME) return 0;
+        if (_from < START_TIME) return 0; //0 reward multiplier  if staking before START_TIME
 
         for (uint256 i = 0; i < HALVING_AT_TIME.length; i++) {
             uint256 endTime = HALVING_AT_TIME[i];
@@ -368,31 +373,39 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
     function updateInfo(uint256 _uid) private {
         UserInfo storage user = userInfo[_uid];
 
-        if (block.timestamp <= user.lastRewardTime) {
+        if (block.timestamp <= user.lastRewardTime) { //Nothing to update as it means that this user is not a staker
             return;
         }
+
         if (user.amount == 0) {
             user.lastRewardTime = block.timestamp;
             return;
         }
+
+
         uint256 GovTokenForFarmer = getReward(
             user.lastRewardTime,
             block.timestamp
         );
+
         uint256 userNewAccRewards = user.amount.mul(GovTokenForFarmer).div(
-            totalStacked
+            totalStaked
         );
+
         user.accRewards = user.accRewards.add(userNewAccRewards);
 
         uint256 lockPercentage = 0;
+
         if (user.rewardDebtAtTime <= FINISH_BONUS_AT_TIME) {
             lockPercentage = getLockPercentage(block.timestamp);
         }
+
         uint256 lockAmount = userNewAccRewards.mul(lockPercentage).div(100);
 
         user.accUnlockRewards = user.accUnlockRewards.add(
             userNewAccRewards.sub(lockAmount)
         );
+
         if (lockAmount > 0) {
             _LockInfo[] storage _info = _lockInfo[user.user];
             _info.push(
@@ -453,8 +466,9 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         uint256 lastRewardTime = block.timestamp > START_TIME
             ? block.timestamp
             : START_TIME;
-        totalStacked = totalStacked.add(_amount);
-        if (uid == 0) {
+        totalStaked = totalStaked.add(_amount);
+
+        if (uid == 0) { //User doesn't exist. Create new user
             uid = userInfo.length + 1;
             userId[address(msg.sender)] = uid;
             userInfo.push(
@@ -474,9 +488,12 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
             );
         }
 
-        UserInfo storage user = userInfo[uid - 1];
+        UserInfo storage user = userInfo[uid - 1];  //The User Info array index is always at user_id - 1
+
         user.amount = user.amount.add(_amount);
+
         if (user.firstDepositTime <= 0) user.firstDepositTime = block.timestamp;
+
         user.lastDepositTime = block.timestamp;
 
         govToken.transferFrom(address(msg.sender), address(this), _amount);
@@ -492,7 +509,7 @@ contract LOOPStaking is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[uid - 1];
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
-            totalStacked = totalStacked.sub(_amount);
+            totalStaked = totalStaked.sub(_amount);
 
             uint256 timeDelta;
             if (user.lastWithdrawTime > 0) {
