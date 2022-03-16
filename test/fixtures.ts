@@ -18,12 +18,12 @@ interface LOOPFixture {
 
 interface LoopStakingFixture {
   LoopStakingContract: Contract
-  LoopToken: Contract  
-  _govToken: string 
-  _halvingAfterBlock: number  
+  LoopToken: Contract
+  _govToken: string
+  _halvingAfterBlock: number
   _rewardMultiplier: number[]
-  _percentLockReward: number[]  
-  _unstakingPeriodStage: number[]  
+  _percentLockReward: number[]
+  _unstakingPeriodStage: number[]
   _userFeePerPeriodStage: number[]
 }
 
@@ -66,8 +66,8 @@ export async function LoopStaking_fixture([wallet, communityPool, ecosystemPool,
     reservePool.address,
     foundersPool.address,
     advisorsPool.address
-  ) 
-  await LoopToken.connect(wallet).setMinterRole(LoopStakingContract.address)  
+  )
+  await LoopToken.connect(wallet).setMinterRole(LoopStakingContract.address)
   await LoopToken.connect(wallet).updateCap(expandTo18Decimals(1145000000)) //1000000000 Loops pre-minted to the owner in LoopToken Constructor
   return { LoopStakingContract, LoopToken, _govToken, _halvingAfterBlock, _rewardMultiplier, _percentLockReward, _unstakingPeriodStage, _userFeePerPeriodStage }
 }
