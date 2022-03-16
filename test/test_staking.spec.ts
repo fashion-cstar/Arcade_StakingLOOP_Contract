@@ -11,7 +11,7 @@ describe('LoopStaking', () => {
         ganacheOptions: {
             hardfork: 'istanbul',
             mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-            gasLimit: 999999999,
+            gasLimit: 99999999,
         },
     })
 
