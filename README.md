@@ -1,6 +1,3 @@
-# @skylaunch/liquidity-staker
-
-
 
 # deploy
 > npx hardhat run ./hardhat_deploy/deployContracts.ts

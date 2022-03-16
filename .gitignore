@@ -1,11 +1,11 @@
 node_modules/
 build/
 *.rar
-
 #Hardhat files
 cache
 .idea
+.env
 
 typechain
 typechain-types
-artifacts
+artifacts 
