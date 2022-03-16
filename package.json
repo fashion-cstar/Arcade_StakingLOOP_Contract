@@ -1,10 +1,10 @@
 {
-  "name": "@skylaunch/liquidity-staker",
-  "version": "1.0.3",
-  "author": "Chris Ciszak",
+  "name": "arcade-staking-contract",
+  "version": "0.1",
+  "author": "",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SkyLaunchFinance/liquidity-staker"
+    "url": ""
   },
   "files": [
     "build"
@@ -26,6 +26,7 @@
     "@openzeppelin/contracts-upgradeable": "^4.5.1",
     "@truffle/hdwallet-provider": "^1.4.1",
     "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "dotenv": "^16.0.0",
     "sol-merger": "^3.1.0",
     "truffle-plugin-verify": "^0.5.20",
     "web3": "^1.4.0"
@@ -50,6 +51,6 @@
     "rimraf": "^3.0.2",
     "solc": "^0.8.0",
     "ts-node": "^9.0.0",
-    "typescript": "^4.0.2"
+    "typescript": "^4.6.2"
   }
 }
