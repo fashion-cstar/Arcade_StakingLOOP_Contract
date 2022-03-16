@@ -19,7 +19,7 @@ describe('LoopStaking', () => {
 
     const loadFixture = createFixtureLoader([wallet, communityPool, ecosystemPool, reservePool, foundersPool, advisorsPool], provider)
     const overrides = {
-        gasLimit: 9999999
+        gasLimit: 99999999
     }
 
     let LoopToken: Contract
