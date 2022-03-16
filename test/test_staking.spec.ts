@@ -11,7 +11,7 @@ describe('LoopStaking', () => {
         ganacheOptions: {
             hardfork: 'istanbul',
             mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-            gasLimit: 9999999,
+            gasLimit: 999999999,
         },
     })
 
@@ -58,7 +58,7 @@ describe('LoopStaking', () => {
             _userFeePerPeriodStage          
         ])
         const receipt = await provider.getTransactionReceipt(LoopStakingDeployed.deployTransaction.hash)
-        expect(receipt.gasUsed).to.eq('5405057')
+        expect(receipt.gasUsed).to.eq('5405069')
         console.log("\t === deploy cost: "+receipt.gasUsed+" ===")
     })
     
