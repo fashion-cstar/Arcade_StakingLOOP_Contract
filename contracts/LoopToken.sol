@@ -48,7 +48,7 @@ contract LoopToken is ERC20, ERC20Burnable, AccessControl {
         _excludedFromAntiWhale[address(0)] = true;
         _excludedFromAntiWhale[address(this)] = true;
 
-        _mint(msg.sender, _cap);
+        _mint(msg.sender, _cap * 40 / 100); //40% of cap pre-minted to be manually distributed to Founders/Advisors/Eco-system wallets
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
     }
@@ -79,10 +79,6 @@ contract LoopToken is ERC20, ERC20Burnable, AccessControl {
     /**
      * @dev Updates the total cap.
      */
-    
-    function setMinterRole(address _staking) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _grantRole(MINTER_ROLE, address(_staking));
-    }
 
     function updateCap(uint256 newCap) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _cap = newCap;
@@ -125,5 +121,21 @@ contract LoopToken is ERC20, ERC20Burnable, AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         _excludedFromAntiWhale[_account] = _excluded;
+    }
+
+    /**
+     * @dev Set Minter Role to an address
+     */
+    
+    function setMinterRole(address _address) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(MINTER_ROLE, address(_address));
+    }
+
+    /**
+     * @dev Set Admin Role to an address
+     */
+
+    function setAdminRole(address _address) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _grantRole(DEFAULT_ADMIN_ROLE, address(_address));
     }
 }

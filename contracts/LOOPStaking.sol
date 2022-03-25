@@ -24,15 +24,15 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         uint256 lastDepositTime;
         uint256 accRewards;
         uint256 accUnlockRewards;
-        uint256 rewardDebt; //return backed total rewards
-        uint256 rewardUnlockDebt; //return backed unlock rewards
+        uint256 rewardDebt; //RewardDebt used to signify all rewards that have been claimed by a user
+        uint256 rewardUnlockDebt; //The unlocked version of RewardDebt
         uint256 rewardDebtAtTime;
         uint256 lastLoopPerShare;
     }
     struct ClaimHistory {
         address user;
         uint256 totalAmount;
-        uint256 unlockAmount;
+        uint256 releasedUnlockAmount;
         uint256 releasedLockAmount;
         uint256 datetime;
     }
@@ -42,7 +42,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
     LoopToken public govToken;
     uint256 REWARD_PER_BLOCK;
     uint256 ONE_BLOCK_TIME;
-    uint256[] public REWARD_MULTIPLIER; // init in constructor function
+    uint256[] public REWARD_MULTIPLIER; // init in constructor function. 
     uint256[] HALVING_AT_TIME; // init in constructor function
     uint256[] unstakingPeriodStage;
     uint256[] userFeePerPeriodStage;
@@ -50,7 +50,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
 
     uint256 HALVING_AFTER_TIME;
     uint256 public totalStaked;
-    uint256 accLoopPerShare;
+    uint256 accLoopPerShare; // Accumulated LOOP per share, times 1e18 to cater for small stakes
     uint256 lastRewardTime;
     uint256 public START_TIME;
 
@@ -212,6 +212,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         advisorsPool = _advisorsPool;
     }
 
+    //Update Staking Reward Start Time
     function setRewardStartTimestamp(uint256 _rewardStartTimestamp)
         external
         onlyOwner
@@ -240,6 +241,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         govToken = _govToken;
     }
 
+    //Return the total reward tokens accrued from _from timestamp to _to timestamp in seconds
     function getReward(uint256 _from, uint256 _to)
         private
         view
@@ -256,6 +258,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         return claimHistory;
     }
 
+    //View function to see total amount of locked LOOP rewards on frontend
     function getLockedRewards(address user) public view returns (uint256) {
         _LockInfo[] memory _info = _lockInfo[user];
         uint256 amount = 0;
@@ -315,7 +318,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         }
     }
 
-    //Total Locked Rewards Available
+    //Total Locked Rewards Available for Unlocking
     function pendingAvailableLockedReward(uint256 _uid)
         private
         view
@@ -324,7 +327,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         UserInfo memory _userInfo = userInfo[_uid];
 
         _LockInfo[] memory _info = _lockInfo[_userInfo.user];
-        uint256 lockPeriod = 15552000; // 60*60*24*30*6 ss*mm*hh*dd*6 months
+        uint256 lockPeriod = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
         uint256 availableLockedAmount = 0;
 
         for (uint256 i = 0; i < _info.length; i++) {
@@ -338,11 +341,12 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         return availableLockedAmount;
     }
 
+    //Adds any locked token that is ready for claim into user's availableLockedAmount
     function unlock(uint256 _uid) private returns (uint256) {
         UserInfo storage _userInfo = userInfo[_uid];
         uint256 availableLockedAmount = 0;
         _LockInfo[] storage _info = _lockInfo[_userInfo.user];
-        uint256 lockPeriod = 15552000; // 60*60*24*30*6 ss*mm*hh*dd*6 months
+        uint256 lockPeriod = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
 
         for (uint256 i = 0; i < _info.length; i++) {
             if (block.timestamp >= _info[i].lockedTime + lockPeriod) {
@@ -357,7 +361,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
     }
 
     // Return reward multiplier over the given _from to _to block.
-    // This multiplier is the product of the Block Multiplier x # of Blocks
+    // This multiplier is the product of the Block Multiplier * # of Blocks
 
     function getMultiplier(uint256 _from, uint256 _to)
         private
@@ -365,7 +369,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         returns (uint256)
     {
         uint256 result = 0;
-        if (_from < START_TIME) return 0; //0 reward multiplier  if staking before START_TIME
+        if (_from < START_TIME) return 0; //0 reward multiplier if staking before START_TIME. This probably should never happen.
 
         for (uint256 i = 0; i < HALVING_AT_TIME.length; i++) {
             uint256 endTime = HALVING_AT_TIME[i];
@@ -399,15 +403,26 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         return result;
     }
 
-    // Update reward variables to be up-to-date.
+
+    /**
+     * Update reward accrual state.
+     *
+     * @dev update() must be called every time the token balances
+     *      or REWARD_PER_BLOCK or REWARD_MULTIPLIER change
+     */
+
     function update() private {
-        if (block.timestamp <= lastRewardTime) { //Nothing to update as it means that this user is not a staker
-            return;
-        }
         if (totalStaked == 0) {
+            //Initialize
             lastRewardTime = START_TIME;
             return;
         }
+        
+        if (block.timestamp <= lastRewardTime) {
+            //No time has passed or staking contract START_TIME has not passed
+            return;
+        }
+
         uint256 LoopRewards = getReward(lastRewardTime, block.timestamp);
         accLoopPerShare = accLoopPerShare.add(
             LoopRewards.mul(1e18).div(totalStaked)
@@ -420,12 +435,13 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         require(uid > 0, "Not a staker");
         require(START_TIME < block.timestamp, "Reward not started!");
 
-        _updateUserReward(uid);
         claimPendingRewards(uid);
     }
 
     function claimPendingRewards(uint256 _uid) internal {
         UserInfo storage user = userInfo[_uid - 1];
+        
+        _updateUserReward(_uid);
 
         if (user.amount > 0) {
             uint256 pendingUnlock = user.accUnlockRewards.sub(
@@ -433,17 +449,19 @@ contract LoopStaking is Ownable, ReentrancyGuard {
             );
 
             if (pendingUnlock > 0) {
+
+                //Add any locked amounts that are due and available for unlock
                 uint256 availableLockedAmount = unlock(_uid - 1);
 
-                pendingUnlock = pendingUnlock.add(availableLockedAmount);
+                uint256 pending = pendingUnlock.add(availableLockedAmount);
 
-                govToken.mint(msg.sender, pendingUnlock);
+                govToken.mint(msg.sender, pending);
 
                 claimHistory.push(
                     ClaimHistory({
                         user: msg.sender,
-                        totalAmount: pendingUnlock,
-                        unlockAmount: pendingUnlock.sub(availableLockedAmount),
+                        totalAmount: pending,
+                        releasedUnlockAmount: pendingUnlock,
                         releasedLockAmount: availableLockedAmount,
                         datetime: block.timestamp
                     })
@@ -453,7 +471,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
 
                 emit SendGovernanceTokenReward(
                     msg.sender,
-                    pendingUnlock.sub(availableLockedAmount),
+                    pendingUnlock,
                     availableLockedAmount
                 );
             }
@@ -463,6 +481,10 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         }
     }
 
+    //Locking of rewards happen here
+    //Locking is such that if user claims after the lock percentage stage changes, he is able to unlock more rewards
+    //This is based on the same method used by DefiKingdoms
+    //Every time the user claims, he pushes a locked portion of rewards into his locked rewards records
     function _updateUserReward(uint256 _uid) internal {
         update();
         if (_uid == 0) return;
@@ -473,7 +495,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
             .mul(accLoopPerShare.sub(user.lastLoopPerShare))
             .div(1e18);
 
-        user.accRewards = user.accRewards.add(pending);
+        user.accRewards = user.accRewards.add(pending); //Total rewards due to the user
 
         uint256 lockPercentage = 0;
 
@@ -509,7 +531,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
 
         totalStaked = totalStaked.add(_amount);
         
-        if (uid == 0) {
+        if (uid == 0) { //If user doesn't exist, add new user
             uid = userInfo.length + 1;
             userId[address(msg.sender)] = uid;
             userInfo.push(
@@ -652,6 +674,9 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         }
     }
 
+    //Withdraw without caring about rewards. EMERGENCY ONLY.
+    //This has a 25% fee to prevent abuse
+
     function emergencyWithdraw() public nonReentrant {
         uint256 uid = userId[address(msg.sender)];
         require(uid > 0, "Not a staker");
@@ -663,7 +688,9 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         user.accUnlockRewards = 0;
         user.rewardDebt = 0;
         user.rewardUnlockDebt = 0;
-        IERC20(govToken).safeTransfer(address(msg.sender), amount);
+        IERC20(govToken).safeTransfer(address(msg.sender), amount.mul(75).div(100));
+        IERC20(govToken).safeTransfer(ecosystemPool, amount.mul(25).div(100));
+
         emit EmergencyWithdraw(msg.sender, amount);
     }
 }

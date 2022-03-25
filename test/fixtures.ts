@@ -68,6 +68,5 @@ export async function LoopStaking_fixture([wallet, communityPool, ecosystemPool,
     advisorsPool.address
   )
   await LoopToken.connect(wallet).setMinterRole(LoopStakingContract.address)
-  await LoopToken.connect(wallet).updateCap(expandTo18Decimals(1145000000)) //1000000000 Loops pre-minted to the owner in LoopToken Constructor
   return { LoopStakingContract, LoopToken, _govToken, _halvingAfterBlock, _rewardMultiplier, _percentLockReward, _unstakingPeriodStage, _userFeePerPeriodStage }
 }
