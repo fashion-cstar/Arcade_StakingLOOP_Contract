@@ -40,12 +40,15 @@ contract LoopStaking is Ownable, ReentrancyGuard {
     ClaimHistory[] public claimHistory;
 
     LoopToken public govToken;
+
+    uint256 LOCK_PERIOD = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
+
     uint256 REWARD_PER_BLOCK;
     uint256 ONE_BLOCK_TIME;
     uint256[] public REWARD_MULTIPLIER; // init in constructor function. 
     uint256[] HALVING_AT_TIME; // init in constructor function
     uint256[] unstakingPeriodStage;
-    uint256[] userFeePerPeriodStage;
+    uint256[] public userFeePerPeriodStage;
     uint256 public FINISH_BONUS_AT_TIME;
 
     uint256 HALVING_AFTER_TIME;
@@ -241,6 +244,53 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         govToken = _govToken;
     }
 
+    //update Multiplier only by owner
+    function setRewardMultiplier(uint256[] memory _rewardMultiplier) external onlyOwner {
+        require(
+            _rewardMultiplier.length > 0,
+            "updating Multiplier: _rewardMultiplier is empty"
+        );
+        require(
+            _rewardMultiplier.length == PERCENT_LOCK_BONUS_REWARD.length,
+            "updating Multiplier: _rewardMultiplier has wrong length"
+        );
+
+        REWARD_MULTIPLIER = _rewardMultiplier;
+    }
+
+    //update Reward Per Block
+    function setRewardPerBlock(uint256 _rewardPerBlock) external onlyOwner {
+        require(
+            _rewardPerBlock > 0,
+            "updating Reward Per Block: _rewardPerBlock must be greater than 0"
+        );
+        
+        REWARD_PER_BLOCK = _rewardPerBlock.mul(10**govToken.decimals());
+    }
+
+    //update user unstaking Fees
+    function setUnstakingFees(uint256[] memory _userFeePerPeriodStage) external onlyOwner {
+        require(
+            (unstakingPeriodStage.length + 2) == _userFeePerPeriodStage.length,
+            "updating unstakingFees: _userFeePerPeriodStage has wrong length"
+        );
+        
+        bool isValid = true;
+        for (uint256 i = 0; i < unstakingPeriodStage.length - 1; i++) {
+            if (_userFeePerPeriodStage[i] > 10000) {
+                isValid = false;
+                break;
+            }
+        }
+
+        require(
+            isValid == true,
+            "updating unstakingFees: _userFeePerPeriodStage has invalid percentage"
+        );
+
+        userFeePerPeriodStage = _userFeePerPeriodStage;
+    }
+
     //Return the total reward tokens accrued from _from timestamp to _to timestamp in seconds
     function getReward(uint256 _from, uint256 _to)
         private
@@ -327,11 +377,11 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         UserInfo memory _userInfo = userInfo[_uid];
 
         _LockInfo[] memory _info = _lockInfo[_userInfo.user];
-        uint256 lockPeriod = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
+        
         uint256 availableLockedAmount = 0;
 
         for (uint256 i = 0; i < _info.length; i++) {
-            if (block.timestamp >= _info[i].lockedTime + lockPeriod) {
+            if (block.timestamp >= _info[i].lockedTime + LOCK_PERIOD) {
                 availableLockedAmount = availableLockedAmount.add(
                     _info[i].lockedAmount
                 );
@@ -345,11 +395,10 @@ contract LoopStaking is Ownable, ReentrancyGuard {
     function unlock(uint256 _uid) private returns (uint256) {
         UserInfo storage _userInfo = userInfo[_uid];
         uint256 availableLockedAmount = 0;
-        _LockInfo[] storage _info = _lockInfo[_userInfo.user];
-        uint256 lockPeriod = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
+        _LockInfo[] storage _info = _lockInfo[_userInfo.user];        
 
         for (uint256 i = 0; i < _info.length; i++) {
-            if (block.timestamp >= _info[i].lockedTime + lockPeriod) {
+            if (block.timestamp >= _info[i].lockedTime + LOCK_PERIOD) {
                 availableLockedAmount = availableLockedAmount.add(
                     _info[i].lockedAmount
                 );
@@ -441,44 +490,44 @@ contract LoopStaking is Ownable, ReentrancyGuard {
     function claimPendingRewards(uint256 _uid) internal {
         UserInfo storage user = userInfo[_uid - 1];
         
+        require(user.amount>0, "You have no amounts staked");
+
         _updateUserReward(_uid);
 
-        if (user.amount > 0) {
-            uint256 pendingUnlock = user.accUnlockRewards.sub(
-                user.rewardUnlockDebt
+        uint256 pendingUnlock = user.accUnlockRewards.sub(
+            user.rewardUnlockDebt
+        );
+
+        if (pendingUnlock > 0) {
+
+            //Add any locked amounts that are due and available for unlock
+            uint256 availableLockedAmount = unlock(_uid - 1);
+
+            uint256 pending = pendingUnlock.add(availableLockedAmount);
+
+            govToken.mint(msg.sender, pending);
+
+            claimHistory.push(
+                ClaimHistory({
+                    user: msg.sender,
+                    totalAmount: pending,
+                    releasedUnlockAmount: pendingUnlock,
+                    releasedLockAmount: availableLockedAmount,
+                    datetime: block.timestamp
+                })
             );
 
-            if (pendingUnlock > 0) {
+            user.rewardDebtAtTime = block.timestamp;
 
-                //Add any locked amounts that are due and available for unlock
-                uint256 availableLockedAmount = unlock(_uid - 1);
-
-                uint256 pending = pendingUnlock.add(availableLockedAmount);
-
-                govToken.mint(msg.sender, pending);
-
-                claimHistory.push(
-                    ClaimHistory({
-                        user: msg.sender,
-                        totalAmount: pending,
-                        releasedUnlockAmount: pendingUnlock,
-                        releasedLockAmount: availableLockedAmount,
-                        datetime: block.timestamp
-                    })
-                );
-
-                user.rewardDebtAtTime = block.timestamp;
-
-                emit SendGovernanceTokenReward(
-                    msg.sender,
-                    pendingUnlock,
-                    availableLockedAmount
-                );
-            }
-
-            user.rewardDebt = user.accRewards;
-            user.rewardUnlockDebt = user.accUnlockRewards;
+            emit SendGovernanceTokenReward(
+                msg.sender,
+                pendingUnlock,
+                availableLockedAmount
+            );
         }
+
+        user.rewardDebt = user.accRewards;
+        user.rewardUnlockDebt = user.accUnlockRewards;
     }
 
     //Locking of rewards happen here
@@ -688,8 +737,9 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         user.accUnlockRewards = 0;
         user.rewardDebt = 0;
         user.rewardUnlockDebt = 0;
-        IERC20(govToken).safeTransfer(address(msg.sender), amount.mul(75).div(100));
-        IERC20(govToken).safeTransfer(ecosystemPool, amount.mul(25).div(100));
+        uint256 amountForEcoPool = amount.mul(25).div(100);
+        IERC20(govToken).safeTransfer(address(msg.sender), amount.sub(amountForEcoPool));
+        IERC20(govToken).safeTransfer(ecosystemPool, amountForEcoPool);
 
         emit EmergencyWithdraw(msg.sender, amount);
     }

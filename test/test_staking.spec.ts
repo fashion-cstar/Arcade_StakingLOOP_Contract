@@ -11,7 +11,7 @@ describe('LoopStaking', () => {
         ganacheOptions: {
             hardfork: 'istanbul',
             mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-            gasLimit: 99999999,
+            gasLimit: 999999999,
         },
     })
 
@@ -25,11 +25,11 @@ describe('LoopStaking', () => {
     let LoopToken: Contract
     let LoopStakingContract: Contract
     let currentTime: number = Math.floor(Date.now() / 1000);
-    let _govToken: string 
-    let _halvingAfterBlock: number  
+    let _govToken: string
+    let _halvingAfterBlock: number
     let _rewardMultiplier: number[]
-    let _percentLockReward: number[]  
-    let _unstakingPeriodStage: number[]  
+    let _percentLockReward: number[]
+    let _unstakingPeriodStage: number[]
     let _userFeePerPeriodStage: number[]
 
     beforeEach(async () => {
@@ -45,23 +45,23 @@ describe('LoopStaking', () => {
     })
 
     it('deploy cost', async () => {
-        const LoopStakingDeployed = await deployContract(wallet, LoopStaking, 
-        [
-            _govToken,
-            1,
-            currentTime + 200,
-            _halvingAfterBlock,
-            2,
-            _rewardMultiplier,
-            _percentLockReward,
-            _unstakingPeriodStage,
-            _userFeePerPeriodStage          
-        ])
+        const LoopStakingDeployed = await deployContract(wallet, LoopStaking,
+            [
+                _govToken,
+                1,
+                currentTime + 200,
+                _halvingAfterBlock,
+                2,
+                _rewardMultiplier,
+                _percentLockReward,
+                _unstakingPeriodStage,
+                _userFeePerPeriodStage
+            ])
         const receipt = await provider.getTransactionReceipt(LoopStakingDeployed.deployTransaction.hash)
         //expect(receipt.gasUsed).to.eq('5471779')
-        console.log("\t === deploy cost: "+receipt.gasUsed+" ===")
+        console.log("\t === deploy cost: " + receipt.gasUsed + " ===")
     })
-    
+
     it('Only owner can set the startStakingTimestamp', async () => {
         await expect(LoopStakingContract.connect(nonOwner).setRewardStartTimestamp(currentTime))
             .to.revertedWith("Ownable: caller is not the owner");
@@ -69,6 +69,32 @@ describe('LoopStaking', () => {
         await expect(LoopStakingContract.connect(wallet).setRewardStartTimestamp(currentTime))
             .to.revertedWith('_rewardStartTimestamp must be after block.timestamp!');
         await LoopStakingContract.connect(wallet).setRewardStartTimestamp(currentTime + 2000)
+    })
+
+    it('Only owner can set Multiplier and RewardPerBlock', async () => {
+        await expect(LoopStakingContract.connect(nonOwner).setRewardMultiplier([]))
+            .to.revertedWith("Ownable: caller is not the owner");
+        await expect(LoopStakingContract.connect(wallet).setRewardMultiplier([]))
+            .to.revertedWith("updating Multiplier: _rewardMultiplier is empty");
+        await expect(LoopStakingContract.connect(wallet).setRewardMultiplier([12, 7, 6, 5, 5, 4, 4, 4, 4, 4, 3, 3]))
+            .to.revertedWith("updating Multiplier: _rewardMultiplier has wrong length")
+        await LoopStakingContract.connect(wallet).setRewardMultiplier([12, 7, 6, 5, 5, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2])
+
+        await expect(LoopStakingContract.connect(nonOwner).setRewardPerBlock(1))
+            .to.revertedWith("Ownable: caller is not the owner");
+        await expect(LoopStakingContract.connect(wallet).setRewardPerBlock(0))
+            .to.revertedWith("updating Reward Per Block: _rewardPerBlock must be greater than 0");      
+        await LoopStakingContract.connect(wallet).setRewardPerBlock(1)
+    })
+
+    it('Only owner can set UnstakingFees', async () => {
+        await expect(LoopStakingContract.connect(nonOwner).setUnstakingFees([]))
+            .to.revertedWith("Ownable: caller is not the owner");
+        await expect(LoopStakingContract.connect(wallet).setUnstakingFees([]))
+            .to.revertedWith("updating unstakingFees: _userFeePerPeriodStage has wrong length");
+        await expect(LoopStakingContract.connect(wallet).setUnstakingFees([2500, 80000, 400, 200, 100, 25, 1]))
+            .to.revertedWith("updating unstakingFees: _userFeePerPeriodStage has invalid percentage")
+        await LoopStakingContract.connect(wallet).setUnstakingFees([2500, 800, 400, 200, 100, 25, 1])        
     })
 
     it('staking, claiming, pending, unstaking, lockamount, unlockamount, unlock, claimhistory test', async () => {
@@ -94,11 +120,11 @@ describe('LoopStaking', () => {
         console.log("user3 balance: " + balance.div(BigNumber.from(10).pow(18)))
         console.log("==================================\n")
 
-        let rewardStartTime = currentTime + 2000        
+        let rewardStartTime = currentTime + 2000
 
         console.log("\n===user1 staked 1000000 before reward starting===")
         await LoopToken.connect(user1).approve(LoopStakingContract.address, expandTo18Decimals(1000000))
-        let tx = await LoopStakingContract.connect(user1).staking(expandTo18Decimals(1000000))        
+        let tx = await LoopStakingContract.connect(user1).staking(expandTo18Decimals(1000000))
         let receipt = await tx.wait()
         // expect(receipt.gasUsed).to.eq('412996')
         console.log("--------gas used: " + receipt.gasUsed + '----------')
@@ -109,7 +135,7 @@ describe('LoopStaking', () => {
         console.log("\n===user1 staked 1000000 after 5days since reward starting===")
         let secs = 3600 * 24 * 5
         let blockTime = rewardStartTime + secs
-        let blockCounts = secs / 2        
+        let blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user1).approve(LoopStakingContract.address, expandTo18Decimals(1000000))
         tx = await LoopStakingContract.connect(user1).staking(expandTo18Decimals(1000000))
@@ -141,7 +167,7 @@ describe('LoopStaking', () => {
         console.log("user1 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user1).claimReward()
+        tx = await LoopStakingContract.connect(user1).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -154,7 +180,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user3).approve(LoopStakingContract.address, expandTo18Decimals(1500000))
-        tx=await LoopStakingContract.connect(user3).staking(expandTo18Decimals(1500000))
+        tx = await LoopStakingContract.connect(user3).staking(expandTo18Decimals(1500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -167,7 +193,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user3).approve(LoopStakingContract.address, expandTo18Decimals(500000))
-        tx=await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
+        tx = await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -180,7 +206,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user2).approve(LoopStakingContract.address, expandTo18Decimals(2000000))
-        tx=await LoopStakingContract.connect(user2).staking(expandTo18Decimals(2000000))
+        tx = await LoopStakingContract.connect(user2).staking(expandTo18Decimals(2000000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user2.address)
@@ -196,7 +222,7 @@ describe('LoopStaking', () => {
         console.log("user3 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user3).claimReward()
+        tx = await LoopStakingContract.connect(user3).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -212,7 +238,7 @@ describe('LoopStaking', () => {
         console.log("user1 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user1).claimReward()
+        tx = await LoopStakingContract.connect(user1).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -225,7 +251,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user3).approve(LoopStakingContract.address, expandTo18Decimals(500000))
-        tx=await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
+        tx = await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -241,7 +267,7 @@ describe('LoopStaking', () => {
         console.log("user2 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user2).claimReward()
+        tx = await LoopStakingContract.connect(user2).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user2.address)
@@ -253,7 +279,7 @@ describe('LoopStaking', () => {
         blockTime = rewardStartTime + secs
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
-        tx=await LoopStakingContract.connect(user1).unstaking(expandTo18Decimals(1000000))
+        tx = await LoopStakingContract.connect(user1).unstaking(expandTo18Decimals(1000000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -277,7 +303,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user1).approve(LoopStakingContract.address, expandTo18Decimals(500000))
-        tx=await LoopStakingContract.connect(user1).staking(expandTo18Decimals(500000))
+        tx = await LoopStakingContract.connect(user1).staking(expandTo18Decimals(500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -290,7 +316,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user2).approve(LoopStakingContract.address, expandTo18Decimals(500000))
-        tx=await LoopStakingContract.connect(user2).staking(expandTo18Decimals(500000))
+        tx = await LoopStakingContract.connect(user2).staking(expandTo18Decimals(500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user2.address)
@@ -306,7 +332,7 @@ describe('LoopStaking', () => {
         console.log("user2 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user2).claimReward()
+        tx = await LoopStakingContract.connect(user2).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user2.address)
@@ -322,7 +348,7 @@ describe('LoopStaking', () => {
         console.log("user1 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user1).claimReward()
+        tx = await LoopStakingContract.connect(user1).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -335,7 +361,7 @@ describe('LoopStaking', () => {
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
         await LoopToken.connect(user3).approve(LoopStakingContract.address, expandTo18Decimals(500000))
-        tx=await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
+        tx = await LoopStakingContract.connect(user3).staking(expandTo18Decimals(500000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -347,7 +373,7 @@ describe('LoopStaking', () => {
         blockTime = rewardStartTime + secs
         blockCounts = secs / 2
         await mineBlock(provider, blockTime);
-        tx=await LoopStakingContract.connect(user3).unstaking(expandTo18Decimals(1000000))
+        tx = await LoopStakingContract.connect(user3).unstaking(expandTo18Decimals(1000000))
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -374,7 +400,7 @@ describe('LoopStaking', () => {
         console.log("user3 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user3).claimReward()
+        tx = await LoopStakingContract.connect(user3).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
@@ -409,7 +435,7 @@ describe('LoopStaking', () => {
         console.log("user1 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user1 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user1).claimReward()
+        tx = await LoopStakingContract.connect(user1).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user1.address)
@@ -425,7 +451,7 @@ describe('LoopStaking', () => {
         console.log("user2 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user2 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user2).claimReward()
+        tx = await LoopStakingContract.connect(user2).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user2.address)
@@ -441,49 +467,49 @@ describe('LoopStaking', () => {
         console.log("user3 pendingUnlocked rewards: " + res.pendingUnlocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 pendingLocked rewards: " + res.pendingLocked.div(BigNumber.from(10).pow(18)))
         console.log("user3 availableLockedAmount rewards: " + res.availableLockedAmount.div(BigNumber.from(10).pow(18)))
-        tx=await LoopStakingContract.connect(user3).claimReward()
+        tx = await LoopStakingContract.connect(user3).claimReward()
         receipt = await tx.wait()
         console.log("--------gas used: " + receipt.gasUsed + '----------')
         balance = await LoopToken.balanceOf(user3.address)
         console.log("user3 balance after claiming: " + balance.div(BigNumber.from(10).pow(18)))
-        console.log("==================================\n")        
-        
+        console.log("==================================\n")
+
         console.log('\n===user1 claimed history since reward starting===')
         res = await LoopStakingContract.connect(wallet).getClaimHistory()
         let user1Claimed = res.filter((item: any) => item.user === user1.address)
-        let sum = 0, total=0
+        let sum = 0, total = 0
         console.log("\nuser1 claimed history: ")
         user1Claimed.map((item: any) => {
             console.log("\t totalAmount: " + item.totalAmount.div(BigNumber.from(10).pow(18)) + "   releasedUnlockAmount: " +
-                            item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " + 
-                            item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
+                item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " +
+                item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
             sum += item.totalAmount.div(BigNumber.from(10).pow(18)).toNumber()
         })
-        total+=sum
+        total += sum
         console.log("\t user1 total rewards: " + sum)
         let user2Claimed = res.filter((item: any) => item.user === user2.address)
-        sum=0
+        sum = 0
         console.log("\nuser2 claimed history: ")
         user2Claimed.map((item: any) => {
             console.log("\t totalAmount: " + item.totalAmount.div(BigNumber.from(10).pow(18)) + "   releasedUnlockAmount: " +
-                            item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " + 
-                            item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
+                item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " +
+                item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
             sum += item.totalAmount.div(BigNumber.from(10).pow(18)).toNumber()
         })
-        total+=sum
+        total += sum
         console.log("\t user2 total rewards: " + sum)
         let user3Claimed = res.filter((item: any) => item.user === user3.address)
-        sum=0
+        sum = 0
         console.log("\nuser3 claimed history: ")
         user3Claimed.map((item: any) => {
             console.log("\t totalAmount: " + item.totalAmount.div(BigNumber.from(10).pow(18)) + "   releasedUnlockAmount: " +
-                            item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " + 
-                            item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
+                item.releasedUnlockAmount.div(BigNumber.from(10).pow(18)) + "  releasedLockAmount: " +
+                item.releasedLockAmount.div(BigNumber.from(10).pow(18)) + "    " + (new Date(item.datetime.toNumber() * 1000)).toLocaleString('en-GB', { timeZone: 'UTC' }))
             sum += item.totalAmount.div(BigNumber.from(10).pow(18)).toNumber()
         })
-        total+=sum
+        total += sum
         console.log("\t user2 total rewards: " + sum)
-        console.log("\n\t total claimed rewards: "+total)
+        console.log("\n\t total claimed rewards: " + total)
         console.log("==================================\n")
     })
 })
