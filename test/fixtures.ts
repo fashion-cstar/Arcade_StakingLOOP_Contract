@@ -38,6 +38,7 @@ export async function LoopStaking_fixture([wallet, communityPool, ecosystemPool,
   const _govToken = LoopToken.address
   const _rewardPerBlock = 1 // rewards amount per Block (currently set 1 as a constant)
   const _oneblocktime = 2 // block time (Harmony block time is 2s)
+  const _lockPeriod = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
   const _stakingStartTimestamp = startTime + 1000 // set staking start time (Unix Timestamp Ex: Fri Feb 18 2022 01:08:16 GMT+0000 = 1645146496)
   const _halvingAfterBlock = 1296000 // 30days block counts
   // 35 months multiplier
@@ -55,6 +56,7 @@ export async function LoopStaking_fixture([wallet, communityPool, ecosystemPool,
     _stakingStartTimestamp,
     _halvingAfterBlock,
     _oneblocktime,
+    _lockPeriod,
     _rewardMultiplier,
     _percentLockReward,
     _unstakingPeriodStage,

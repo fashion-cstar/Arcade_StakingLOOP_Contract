@@ -41,7 +41,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
 
     LoopToken public govToken;
 
-    uint256 LOCK_PERIOD = 15552000; //Seconds: 60*60*24*30*6 ss*mm*hh*dd*6 months
+    uint256 immutable LOCK_PERIOD; //seconds
 
     uint256 REWARD_PER_BLOCK;
     uint256 ONE_BLOCK_TIME;
@@ -89,6 +89,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         uint256 _rewardStartTimestamp,
         uint256 _halvingAfterBlock,
         uint256 _oneblocktime,
+        uint256 _lockPeriod,
         uint256[] memory _rewardMultiplier,
         uint256[] memory _percentLockReward,
         uint256[] memory _unstakingPeriodStage,
@@ -103,26 +104,37 @@ contract LoopStaking is Ownable, ReentrancyGuard {
             _rewardStartTimestamp > block.timestamp,
             "constructor: _rewardStartTimestamp must be after block.timestamp!"
         );
+        
         require(
             _rewardPerBlock > 0,
             "constructor: _rewardPerBlock must be greater than 0"
         );
+
         require(
             _oneblocktime > 0,
             "constructor: _oneblocktime must be greater than 0"
         );
+
+        require(
+            _lockPeriod > 0,
+            "constructor: _lockPeriod must be greater than 0"
+        );
+
         require(
             _rewardMultiplier.length > 0,
             "constructor: _rewardMultiplier is empty"
         );
+
         require(
             _rewardMultiplier.length == _percentLockReward.length,
             "constructor: _rewardMultiplier and _percentLockReward are incorrect length"
         );
+
         require(
             _unstakingPeriodStage.length > 0,
             "constructor: _unstakingPeriodStage is empty"
         );
+
         require(
             (_unstakingPeriodStage.length + 2) == _userFeePerPeriodStage.length,
             "constructor: _unstakingPeriodStage and _userFeePerPeriodStage are incorrect length"
@@ -173,6 +185,7 @@ contract LoopStaking is Ownable, ReentrancyGuard {
         REWARD_PER_BLOCK = _rewardPerBlock.mul(10**govToken.decimals());
         REWARD_MULTIPLIER = _rewardMultiplier;
         PERCENT_LOCK_BONUS_REWARD = _percentLockReward;
+        LOCK_PERIOD = _lockPeriod;
         unstakingPeriodStage = _unstakingPeriodStage;
         userFeePerPeriodStage = _userFeePerPeriodStage;
 

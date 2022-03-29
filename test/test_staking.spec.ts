@@ -52,6 +52,7 @@ describe('LoopStaking', () => {
                 currentTime + 200,
                 _halvingAfterBlock,
                 2,
+                15552000,
                 _rewardMultiplier,
                 _percentLockReward,
                 _unstakingPeriodStage,
