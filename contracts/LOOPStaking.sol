@@ -268,6 +268,8 @@ contract LoopStaking is Ownable, ReentrancyGuard {
             "updating Multiplier: _rewardMultiplier has wrong length"
         );
 
+        update();
+
         REWARD_MULTIPLIER = _rewardMultiplier;
     }
 
@@ -277,6 +279,8 @@ contract LoopStaking is Ownable, ReentrancyGuard {
             _rewardPerBlock > 0,
             "updating Reward Per Block: _rewardPerBlock must be greater than 0"
         );
+        
+        update();
         
         REWARD_PER_BLOCK = _rewardPerBlock.mul(10**govToken.decimals());
     }
