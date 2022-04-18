@@ -84,7 +84,7 @@ describe('LoopStaking', () => {
         await expect(LoopStakingContract.connect(nonOwner).setRewardPerBlock(1))
             .to.revertedWith("Ownable: caller is not the owner");
         await expect(LoopStakingContract.connect(wallet).setRewardPerBlock(0))
-            .to.revertedWith("updating Reward Per Block: _rewardPerBlock must be greater than 0");      
+            .to.revertedWith("updating Reward Per Block: _rewardPerBlock must be greater than 0");
         await LoopStakingContract.connect(wallet).setRewardPerBlock(1)
     })
 
@@ -95,7 +95,7 @@ describe('LoopStaking', () => {
             .to.revertedWith("updating unstakingFees: _userFeePerPeriodStage has wrong length");
         await expect(LoopStakingContract.connect(wallet).setUnstakingFees([2500, 80000, 400, 200, 100, 25, 1]))
             .to.revertedWith("updating unstakingFees: _userFeePerPeriodStage has invalid percentage")
-        await LoopStakingContract.connect(wallet).setUnstakingFees([2500, 800, 400, 200, 100, 25, 1])        
+        await LoopStakingContract.connect(wallet).setUnstakingFees([2500, 800, 400, 200, 100, 25, 1])
     })
 
     it('staking, claiming, pending, unstaking, lockamount, unlockamount, unlock, claimhistory test', async () => {
